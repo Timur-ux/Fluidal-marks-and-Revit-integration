@@ -3,6 +3,7 @@ import json
 from math import sqrt
 from DataBaseAdapter import IDataBaseAdapter, MariaDBAdapter
 from objectData import ObjectData
+import numpy as np
 
 EVALUATION_ERROR = 0.05
 
@@ -15,19 +16,16 @@ def isObjectMoved(oldPos: tuple[float, float, float], curPos: tuple[float, float
 
     return difference > EVALUATION_ERROR
 
-def notifyRevitAboutMovedObject(oldObjectData, newObjectData, revitSocket):
-    x0,y0,z0 = oldObjectData.pos()
-    x, y, z = newObjectData.pos()
+def notifyRevitAboutMovedObject(guid, newPos, newRot, revitSocket):
+    data = json.dumps({
+            "guid" : guid,
+            "newPos" : newPos,
+            "newRot" : newRot
+            })
 
-    data = {
-            "guid" : newObjectData.guid(),
-            "dx" : x - x0,
-            "dy" : y - y0,
-            "dz" : z - z0
-            }
-    print(json.dumps(data))
+    print(data)
     
-    revitSocket.send_string(json.dumps(data))
+    revitSocket.send_string(data)
     
 
 class Server:
@@ -42,24 +40,38 @@ class Server:
 
         self.dbAdapter = dbAdapter
 
+        # Костыль
+        self.cameraPosition = None
+        self.cameraRot = None
+
     def processDetectedMark(self, data):
-        tagId, x, y, z, w, h, d = data["id"], data["x"], data["y"], data["z"],\
-                data["width"], data["height"], data["depth"]
+        tagId, pos, rot = data["id"], tuple(data["pos"]), tuple(data["rot"])
 
 
         objectData = self.dbAdapter.getData(tagId)
-        assert objectData is not None
+        if objectData is None:
+            print(f"Mark not placed in DB detected. Tag id: {tagId}. Skipping...")
+            return
+        if objectData.isPositional():
+            self.cameraPosition = tuple(np.asarray(pos) + np.asarray(objectData.pos()))
+            self.cameraRot = rot
+            return
 
-        oldPos = (objectData.x(),objectData.y(), objectData.z())
-        if isObjectMoved(oldPos, (x, y, z)):
-            newObjectData = ObjectData(guid=objectData.guid(), name=objectData.name(), tagId=tagId, pos=(x, y, z), size=(w, h, d))
-            self.dbAdapter.updateData(newObjectData)
-            notifyRevitAboutMovedObject(objectData, newObjectData, self.revitSocket)
+        oldPos = objectData.pos()
+        if isObjectMoved(oldPos, pos):
+            objectData.pos_ = pos
+            objectData.rotation_ = rot
+            self.dbAdapter.updateData(objectData)
+            notifyRevitAboutMovedObject(objectData.guid(), pos, rot, self.revitSocket)
 
     def processPostElementData(self, data):
-        objectData = ObjectData(guid=data['guid'], name=data['name'], tagId=data['fluidalMarkId'], \
-                pos=(data["x"], data["y"], data["z"]), \
-                size=(data["width"], data["height"], data["depth"]))
+        if data["isPositional"]:
+            objectData = ObjectData(guid=data['guid'], name = None, size = None, tagId=data['fluidalMarkId'], \
+                pos=tuple(data["pos"]), rotation=tuple(data["rot"]), isPositional=True)
+        else:
+            objectData = ObjectData(guid=data['guid'], name=data['name'], tagId=data['fluidalMarkId'], \
+                    pos=tuple(data["pos"]), rotation=tuple(data["rot"]), \
+                    size=(data["width"], data["height"], data["depth"]), isPositional=False)
         self.dbAdapter.setData(objectData)
 
     def process(self, message):

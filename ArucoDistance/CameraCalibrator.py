@@ -6,6 +6,8 @@ import time
 # termination criteria
 criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
 
+EVALUATION_ERROR = 0.001
+
 
 def calibrateUsingCamera(cameraIndex=0, dirToStoreGoodCalibrationFrames=None, doLog=False):
     gridHeight = 7
@@ -105,3 +107,23 @@ def calibrateUsingImages(dirWithImages):
         "rvecs": rvecs,
         "tvecs": tvecs,
     }
+
+def calibrateMarkerSize(imgWithMark, realMarkerSize, realDistanceToMarker, detector, camera_fc_params, eps=EVALUATION_ERROR):
+    gray = cv.cvtColor(imgWithMark, cv.COLOR_BGR2GRAY)
+    lowerS, higherS = realMarkerSize / 10, realMarkerSize * 10
+    midS = (lowerS + higherS)/2
+    midD = 1e8
+    i = 0
+    while abs(realDistanceToMarker - midD) > eps:
+        if realDistanceToMarker < midD:
+            higherS = midS
+        else:
+            lowerS = midS
+        midS = (lowerS + higherS)/2
+        midD = np.linalg.norm(detector.detect(gray, estimate_tag_pose=True, camera_params=camera_fc_params, tag_size=midS)[0].pose_t)
+        print(f"Step {i}: midS: {midS}, minD: {midD}")
+        i += 1
+
+    return midS
+
+

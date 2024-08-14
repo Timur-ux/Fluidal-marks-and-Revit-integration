@@ -1,10 +1,12 @@
 class ObjectData:
-    def __init__(self, guid: str, name: str, pos: tuple[float, float, float], size: tuple[float, float, float], tagId: int):
+    def __init__(self, guid: str, name: str, pos: tuple[float, float, float], rotation: tuple[float, float, float], size: tuple[float, float, float], tagId: int, isPositional = False):
         self.guid_ = guid
         self.tagId_ = tagId
         self.name_ = name
-        self.pos_ = list(pos)
-        self.size_ = list(size)
+        self.pos_ = pos
+        self.size_ = size
+        self.rotation_ = rotation
+        self.isPositional_ = isPositional
 
     def guid(self):
         return self.guid_
@@ -17,27 +19,39 @@ class ObjectData:
 
     def pos(self):
         return self.pos_
+
+    def rotation(self):
+        return self.rotation_
     
     def x(self):
-        return self.pos_[0]
+        x, y, z = self.pos_
+        return x
+
+    def isPositional(self):
+        return self.isPositional_
     
     def y(self):
-        return self.pos_[1]
+        x, y, z = self.pos_
+        return y
 
     def z(self):
-        return self.pos_[2]
+        x, y, z = self.pos_
+        return z
 
     def size(self):
         return self.size_;
 
     def width(self):
-        return self.size_[0]
+        w, h, d = self.size_
+        return w
 
     def height(self):
-        return self.size_[1]
+        w, h, d = self.size_
+        return h
 
     def depth(self):
-        return self.size_[2]
+        w, h, d = self.size_
+        return d
 
     def __eq__(self, other):
         res = \

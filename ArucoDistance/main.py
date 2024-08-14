@@ -6,6 +6,7 @@ import utils
 import zmq
 import numpy as np
 import time
+import cv2
 
 DEFAULT_CALIBRATION_RESULT_PATH = "./CalibrationResult.json"
 DEFAULT_SERVER_DATA_PATH = "./Config.json"
@@ -41,7 +42,7 @@ def calibrate(camera_index):
     print(f"It is stored at: {calibrationFilePath}")
 
 
-def startRecognition(camera_index):
+def startRecognition(camera_index, precalibrateMarkerSizeData = None):
     calibrationFilePath = input(
         f"Input path to camera's calibration file({DEFAULT_CALIBRATION_RESULT_PATH} by default): ")
     if calibrationFilePath == "":
@@ -62,7 +63,7 @@ def startRecognition(camera_index):
 
     now = time.time()
     AD.startRecognize(camera_config, camera_index,
-                      recognitionProcessor)
+                      recognitionProcessor, precalibrateMarkerSizeData)
     print(f"time: {time.time() - now}")
 
 
@@ -75,17 +76,26 @@ def main():
                         help="point camera index that will be calibrated(Default: 0)")
     parser.add_argument("--source_path", type=str, default="",
                         help="point source (video/image) to aruco estimate(Default: "")")
+    parser.add_argument("--precalibrateMarkerSizeData", type=tuple[str, float, float], default=None, help="if (path to img with marker, dist to marker, real marker size) is given, marker size will be precalibrated ")
 
     namespace = parser.parse_args()
 
     camera_index = namespace.camera_index
     source_path = namespace.source_path
+    precalibrateMarkerSizeData = namespace.precalibrateMarkerSizeData
+    if precalibrateMarkerSizeData is not None:
+        precalibrateMarkerSizeData = "".join(precalibrateMarkerSizeData[1:-1]).split(',')
+        path, dist, markerSize = precalibrateMarkerSizeData
+        dist = float(dist)
+        markerSize = float(markerSize)
+        precalibrateMarkerSizeData = (cv2.imread(path), dist, markerSize)
+
     if namespace.calibrate:
         calibrate(camera_index)
     elif source_path != "":
-        startRecognition(source_path)
+        startRecognition(source_path, precalibrateMarkerSizeData)
     else:
-        startRecognition(camera_index)
+        startRecognition(camera_index, precalibrateMarkerSizeData)
 
 
 
