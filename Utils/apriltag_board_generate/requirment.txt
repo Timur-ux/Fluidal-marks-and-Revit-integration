@@ -1,3 +1,0 @@
-numpy
-drawsvg[all]
-pyyaml
