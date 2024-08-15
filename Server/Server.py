@@ -4,6 +4,7 @@ from math import sqrt
 from DataBaseAdapter import IDataBaseAdapter, MariaDBAdapter
 from objectData import ObjectData
 import numpy as np
+import cv2
 
 EVALUATION_ERROR = 0.05
 
@@ -40,12 +41,10 @@ class Server:
 
         self.dbAdapter = dbAdapter
 
-        # Костыль
-        self.cameraPosition = None
-        self.cameraRot = None
+        self.camerasPositionData = {}
 
     def processDetectedMark(self, data):
-        tagId, pos, rot = data["id"], tuple(data["pos"]), tuple(data["rot"])
+        tagId, pos, rot, cameraId = data["id"], np.asarray(data["pos"]), np.asarray(data["rot"]), data["cameraId"]
 
 
         objectData = self.dbAdapter.getData(tagId)
@@ -53,14 +52,19 @@ class Server:
             print(f"Mark not placed in DB detected. Tag id: {tagId}. Skipping...")
             return
         if objectData.isPositional():
-            self.cameraPosition = tuple(np.asarray(pos) + np.asarray(objectData.pos()))
-            self.cameraRot = rot
+            self.camerasPositionData[cameraId] = [tuple(np.asarray(pos) + np.asarray(objectData.pos())), rot]
             return
 
         oldPos = objectData.pos()
         if isObjectMoved(oldPos, pos):
-            objectData.pos_ = pos
-            objectData.rotation_ = rot
+            objectData.pos_ = self.camerasPositionData[cameraId][0] + pos
+            
+            cameraRotMatrix, _ = cv2.Rodrigues(self.camerasPositionData[cameraId][1])
+            markRotMatrix, _ = cv2.Rodrigues(rot)
+            resultRotMatrix = cameraRotMatrix @ markRotMatrix
+            resultRot = cv2.Rodrigues(resultRotMatrix)
+
+            objectData.rotation_ = resultRot
             self.dbAdapter.updateData(objectData)
             notifyRevitAboutMovedObject(objectData.guid(), pos, rot, self.revitSocket)
 

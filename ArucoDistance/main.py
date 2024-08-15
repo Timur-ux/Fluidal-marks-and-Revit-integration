@@ -13,13 +13,15 @@ DEFAULT_SERVER_DATA_PATH = "./Config.json"
 
 
 class RecognitionProcessor:
-    def __init__(self, context: zmq.Context, sockAddr):
+    def __init__(self, context: zmq.Context, sockAddr, cameraId):
         self.context = context
         self.socket = context.socket(zmq.PUSH)
         self.socket.connect(sockAddr)
+        self.cameraId = cameraId
 
     def process(self, data):
         data["type"] = "DetectedMark";
+        data["cameraId"] = self.cameraId
         print("Sending data:", data)
         self.socket.send_string(json.dumps(data, cls=utils.NumpyToJsonEncoder))
 
@@ -58,8 +60,15 @@ def startRecognition(camera_index, precalibrateMarkerSizeData = None):
         netConfig = json.load(file)
 
     context = zmq.Context(1)
-    cameraSocket = netConfig["ClientSocket"]
-    recognitionProcessor = DummyRecognitionProcessor()#RecognitionProcessor(context, cameraSocket)
+    initialDataGiverSocket = context.socket(zmq.REQ)
+    initialDataGiverSocket.connect(netConfig["InitialDataGiverSocket"]) 
+    initialDataGiverSocket.send_string("")
+
+    request = initialDataGiverSocket.recv_string()
+    data = json.loads(request)
+
+    clientSocket = data["ClientSocket"]
+    recognitionProcessor = DummyRecognitionProcessor()#RecognitionProcessor(context, clientSocket, data["Id"])
 
     now = time.time()
     AD.startRecognize(camera_config, camera_index,
