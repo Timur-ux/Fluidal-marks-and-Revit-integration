@@ -4,11 +4,13 @@ import json
 import mariadb
 import sys
 from cache import Cache
+from typing import Optional
+import numpy as np
 
 class IDataBaseAdapter(metaclass=ABCMeta):
 
     @abstractmethod
-    def getData(self, tagId: int) -> ObjectData:
+    def getData(self, tagId: int) -> Optional[ObjectData]:
         """
         Return objectData with corresponding tagId from DB or Cache
         If no Objects with this tagId None is returned
@@ -74,70 +76,97 @@ class MariaDBAdapter(IDataBaseAdapter):
                 return None
         if len(items) > 1:
             print("Warn: multiple items with same tagid in DB, first returned")
-        item = items[0]
-        tvec = tuple(json.loads(item[6]))
-        rvec = tuple(json.loads(item[7]))
 
-        result = ObjectData(guid=item[0], name=item[1], tagId=item[5],\
-                pos=tvec, rotation=rvec, size=(item[3], item[4], item[5]), isPositional=isPositional)
+        item = items[0]
+        result = None
+        if isPositional:
+            guid = item[0]
+            tagId = item[1]
+            markPos = np.asarray(json.loads(item[2]))
+            objectPos = np.asarray(json.loads(item[3]))
+            result = ObjectData(
+                    guid=guid
+                    , tagId=tagId
+                    , markPos=markPos
+                    , objectPos=objectPos
+                    , isPositional=True)
+        else:
+            guid = item[0]
+            name = item[1]
+            tagId = item[2]
+            size = np.asarray(json.loads(item[3]))
+            markPos = np.asarray(json.loads(item[4]))
+            objectPos = np.asarray(json.loads(item[5]))
+            result = ObjectData(
+                    guid=guid
+                    , name = name
+                    , tagId=tagId
+                    , markPos=markPos
+                    , objectPos=objectPos
+                    , isPositional=False
+                    , size = size)
+
+
         self.cache.update(result)
         return result;
 
     def updateData(self, objectData):
-        if self.cache.isObjectInCache(objectData.tagId()) \
-        and self.cache.getObjectData(objectData.tagId()) == objectData:
+        if self.cache.isObjectInCache(objectData.tagId) \
+        and self.cache.getObjectData(objectData.tagId) == objectData:
             return
         
         self.cache.update(objectData)
-        tvecs = json.dumps(objectData.pos())
-        rvecs = json.dumps(objectData.rotation())
-        if objectData.isPositional():
-            request = f"UPDATE {self.positionalMarksDBName} SET guid=?,tvecs=?, rvecs=?, tagid=? WHERE tagid=?;"
+
+        markPos = json.dumps(list(objectData.markPos))
+        objectPos = json.dumps(list(objectData.objectPos))
+
+        if objectData.isPositional:
+            request = f"UPDATE {self.positionalMarksDBName} SET guid=?,markPos=?, objectPos=?, tagid=? WHERE tagid=?;"
             self.cursor.execute(request
-                                , (objectData.guid()
-                                , tvecs
-                                , rvecs
-                                , objectData.tagId()
-                                , objectData.tagId())
+                                , (objectData.guid
+                                , markPos
+                                , objectPos
+                                , objectData.tagId
+                                , objectData.tagId)
                                 )
         else:
-            request = f"UPDATE {self.objectsDBName} SET guid=?,name=?,tvecs=?, rvecs=?,width=?,height=?,depth=?,tagid=? WHERE tagid=?;"
+            size = json.dumps(list(objectData.size))
+            request = f"UPDATE {self.objectsDBName} SET guid=?,name=?,tagid=?,markPos=?,objectPos=?,size=? WHERE tagid=?;"
             self.cursor.execute(request
-                                , (objectData.guid()
-                                , objectData.name()
-                                , tvecs
-                                , rvecs
-                                , objectData.width()
-                                , objectData.height()
-                                , objectData.depth()
-                                , objectData.tagId()
-                                , objectData.tagId())
+                                , (objectData.guid
+                                , objectData.name
+                                , objectData.tagId
+                                , markPos
+                                , objectPos
+                                , size
+                                , objectData.tagId)
                                 )
         self.connection.commit()
 
     def setData(self, objectData):
         self.cache.update(objectData)
-        tvecs = json.dumps(objectData.pos())
-        rvecs = json.dumps(objectData.rotation())
+        markPos = json.dumps(list(objectData.markPos))
+        objectPos = json.dumps(list(objectData.objectPos))
         if objectData.isPositional():
-            request = f"REPLACE INTO {self.positionalMarksDBName} SET guid=?,tvecs=?,rvecs=?,tagid=?;"
+            request = f"REPLACE INTO {self.positionalMarksDBName} SET guid=?,markPos=?, objectPos=?, tagid=? WHERE tagid=?;"
             self.cursor.execute(request
-                                , (objectData.guid()
-                                , tvecs
-                                , rvecs
-                                , objectData.tagId())
+                                , (objectData.guid
+                                , markPos
+                                , objectPos
+                                , objectData.tagId
+                                , objectData.tagId)
                                 )
         else:
-            request = f"REPLACE INTO {self.objectsDBName} SET guid=?,name=?,tvecs=?, rvecs=?,width=?,height=?,depth=?,tagid=?;"
+            size = json.dumps(list(objectData.size))
+            request = f"REPLACE INTO {self.objectsDBName} SET guid=?,name=?,tagid=?,markPos=?,objectPos=?,size=? WHERE tagid=?;"
             self.cursor.execute(request
-                                , (objectData.guid()
-                                , objectData.name()
-                                , tvecs
-                                , rvecs
-                                , objectData.width()
-                                , objectData.height()
-                                , objectData.depth()
-                                , objectData.tagId())
+                                , (objectData.guid
+                                , objectData.name
+                                , objectData.tagId
+                                , markPos
+                                , objectPos
+                                , size
+                                , objectData.tagId)
                                 )
         self.connection.commit()
 

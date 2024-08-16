@@ -95,8 +95,8 @@ def startRecognize(camera_config, source, recognitionProcessor, precalibrateMark
 
                 recognitionProcessor.process({
                     "distance": distance,
-                    "pos" : tvecs[i].T[0],
-                    "rot" : cv2.Rodrigues(rvecs[i]).T[0],
+                    "tvec" : tvecs[i].T[0],
+                    "rvec" : cv2.Rodrigues(rvecs[i]).T[0],
                     "id": ids[i]
                 })
                 cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs,

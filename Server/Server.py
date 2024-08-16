@@ -1,19 +1,15 @@
 import zmq
 import json
-from math import sqrt
-from DataBaseAdapter import IDataBaseAdapter, MariaDBAdapter
+from DataBaseAdapter import IDataBaseAdapter
 from objectData import ObjectData
 import numpy as np
 import cv2
 
 EVALUATION_ERROR = 0.05
 
-def isObjectMoved(oldPos: tuple[float, float, float], curPos: tuple[float, float, float]):
-    sumOfSquares = 0
-    for old, new in zip(oldPos, curPos):
-        sumOfSquares += (old - new)**2
-    
-    difference = sqrt(sumOfSquares)
+def isObjectMoved(oldPos, curPos):
+    '''calc module of distance between 2 object poses and compare it with EVALUATION_ERROR'''
+    difference = np.sqrt(np.sum((oldPos - curPos)**2))
 
     return difference > EVALUATION_ERROR
 
@@ -44,38 +40,54 @@ class Server:
         self.camerasPositionData = {}
 
     def processDetectedMark(self, data):
-        tagId, pos, rot, cameraId = data["id"], np.asarray(data["pos"]), np.asarray(data["rot"]), data["cameraId"]
-
+        tagId, tvec, rvec, cameraId = data["id"], np.asarray(data["tvec"]), np.asarray(data["rvec"]), data["cameraId"]
 
         objectData = self.dbAdapter.getData(tagId)
         if objectData is None:
             print(f"Mark not placed in DB detected. Tag id: {tagId}. Skipping...")
             return
-        if objectData.isPositional():
-            self.camerasPositionData[cameraId] = [tuple(np.asarray(pos) + np.asarray(objectData.pos())), rot]
+        
+        if objectData.isPositional:
+            self.camerasPositionData[cameraId] = [np.asarray(tvec) + np.asarray(objectData.markPos), rvec]
             return
 
-        oldPos = objectData.pos()
-        if isObjectMoved(oldPos, pos):
-            objectData.pos_ = self.camerasPositionData[cameraId][0] + pos
+        oldPos = objectData.markPos
+        if isObjectMoved(oldPos, tvec):
+            objectData.markPos = self.camerasPositionData[cameraId][0] + tvec
             
             cameraRotMatrix, _ = cv2.Rodrigues(self.camerasPositionData[cameraId][1])
-            markRotMatrix, _ = cv2.Rodrigues(rot)
+            markRotMatrix, _ = cv2.Rodrigues(rvec)
             resultRotMatrix = cameraRotMatrix @ markRotMatrix
             resultRot = cv2.Rodrigues(resultRotMatrix)
 
             objectData.rotation_ = resultRot
             self.dbAdapter.updateData(objectData)
-            notifyRevitAboutMovedObject(objectData.guid(), pos, rot, self.revitSocket)
+            notifyRevitAboutMovedObject(objectData.guid(), tvec, rvec, self.revitSocket)
 
     def processPostElementData(self, data):
-        if data["isPositional"]:
-            objectData = ObjectData(guid=data['guid'], name = None, size = None, tagId=data['fluidalMarkId'], \
-                pos=tuple(data["pos"]), rotation=tuple(data["rot"]), isPositional=True)
+        guid = data['guid']
+        tagId = data['fluidalMarkId']
+        markPos = np.asarray(data['markPos'])
+        objectPos = np.asarray(data['objectPos'])
+        isPositional = data['isPositional']
+        if isPositional:
+            objectData = ObjectData(
+                    guid=guid
+                    , tagId=tagId
+                    , markPos=markPos
+                    , objectPos=objectPos
+                    , isPositional=True)
         else:
-            objectData = ObjectData(guid=data['guid'], name=data['name'], tagId=data['fluidalMarkId'], \
-                    pos=tuple(data["pos"]), rotation=tuple(data["rot"]), \
-                    size=(data["width"], data["height"], data["depth"]), isPositional=False)
+            name = data['name']
+            size = np.asarray(data['size'])
+            objectData = ObjectData(
+                    guid=guid
+                    , name = name
+                    , tagId=tagId
+                    , markPos=markPos
+                    , objectPos=objectPos
+                    , isPositional=False
+                    , size = size)
         self.dbAdapter.setData(objectData)
 
     def process(self, message):

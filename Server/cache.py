@@ -14,14 +14,14 @@ class Cache:
         update objectData if it already in cache,
         add it to cache otherwise
         """
-        if objectData.tagId() not in self.cache:
+        if objectData.tagId not in self.cache:
             if self.cacheQueue.full():
                 lastId = self.cacheQueue.get()
                 del self.cache[lastId]
-            self.cacheQueue.put(objectData.tagId())
+            self.cacheQueue.put(objectData.tagId)
 
 
-        self.cache[objectData.tagId()] = objectData
+        self.cache[objectData.tagId] = objectData
 
 
     def isObjectInCache(self, tagId) -> bool:
