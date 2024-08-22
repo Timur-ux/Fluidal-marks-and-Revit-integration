@@ -8,18 +8,16 @@ def calculateAnglesPos(objectPos,
                        camInfo: CameraInfo):
     w, h, d = 0.1, 0.1, 0.1#objectSize / 5
     angles = np.zeros((8,3,1))
-    angles[0] = objectPos + np.asarray([- w/2, - h/2, - d/2]).reshape((3, 1))
-    angles[1] = objectPos + np.asarray([- w/2, + h/2, - d/2]).reshape((3, 1))
-    angles[2] = objectPos + np.asarray([+ w/2, + h/2, - d/2]).reshape((3, 1))
-    angles[3] = objectPos + np.asarray([+ w/2, - h/2, - d/2]).reshape((3, 1))
+    angles[0] = np.asarray([- w/2, - h/2, - d/2]).reshape((3, 1))
+    angles[1] = np.asarray([- w/2, + h/2, - d/2]).reshape((3, 1))
+    angles[2] = np.asarray([+ w/2, + h/2, - d/2]).reshape((3, 1))
+    angles[3] = np.asarray([+ w/2, - h/2, - d/2]).reshape((3, 1))
 
-    angles[4] = objectPos + np.asarray([- w/2, - h/2, + d/2]).reshape((3, 1))
-    angles[5] = objectPos + np.asarray([- w/2, + h/2, + d/2]).reshape((3, 1))
-    angles[6] = objectPos + np.asarray([+ w/2, + h/2, + d/2]).reshape((3, 1))
-    angles[7] = objectPos + np.asarray([+ w/2, - h/2, + d/2]).reshape((3, 1))
+    angles[4] = np.asarray([- w/2, - h/2, + d/2]).reshape((3, 1))
+    angles[5] = np.asarray([- w/2, + h/2, + d/2]).reshape((3, 1))
+    angles[6] = np.asarray([+ w/2, + h/2, + d/2]).reshape((3, 1))
+    angles[7] = np.asarray([+ w/2, - h/2, + d/2]).reshape((3, 1))
 
-    for i in range(8):
-        angles[i] = np.dot(objectRot, angles[i])
     angles, _ = cv2.projectPoints(angles, objectRot, objectPos, camInfo.matrix, camInfo.distCoeffs)
 
     points = []

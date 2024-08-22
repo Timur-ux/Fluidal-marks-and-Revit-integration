@@ -59,8 +59,6 @@ def processFrame(frame, camInfo: CameraInfo, markerSize, recognitionProcessor, w
                     rot, _ = cv2.Rodrigues(np.asarray(response["rot"]).reshape((3, 1)))
                     rot = rvecs[i]
 
-                    DF.drawMarkFrame(frame, corners[i])
-                    rot = np.asarray([1 if i == j else 0 for i in range(3) for j in range(3)], dtype=np.float64).reshape((3, 3))
                     angles = DF.calculateAnglesPos(pos, size, rot, camInfo)
                     DF.drawBoundingBoxOnFrame(frame, angles)
                     DF.drawNameAboveMarker(frame, name, tvecs[i], camInfo)
