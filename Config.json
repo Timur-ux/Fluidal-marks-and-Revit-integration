@@ -1,8 +1,8 @@
 {
   "InitialDataGiverSocket" :  "tcp://127.0.0.1:4999",
-  "ClientSocket" : "tcp://127.0.0.1:5000",
-  "ServerSocket" : "tcp://127.0.0.1:5001",
-  "RevitClient" : "tcp://127.0.0.1:5002",
-  "RevitServer" : "tcp://127.0.0.1:5003",
+  "Camera2Server" : "tcp://127.0.0.1:5000",
+  "Server2Camera" : "tcp://127.0.0.1:5001",
+  "Server2Revit" : ["tcp://127.0.0.1:5002", "tcp://127.0.0.1:5003"],
+  "Revit2Server" : ["tcp://127.0.0.1:5004", "tcp://127.0.0.1:5005"],
   "Description" : "Указан IP адрес localhost'а для тестирования на локальной машине"
 }

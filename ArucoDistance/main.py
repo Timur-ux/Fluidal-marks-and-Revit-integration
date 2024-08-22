@@ -15,7 +15,7 @@ DEFAULT_SERVER_DATA_PATH = "./Config.json"
 class RecognitionProcessor:
     def __init__(self, context: zmq.Context, sockAddr, cameraId):
         self.context = context
-        self.socket = context.socket(zmq.PUSH)
+        self.socket = context.socket(zmq.REQ)
         self.socket.connect(sockAddr)
         self.cameraId = cameraId
 
@@ -24,27 +24,22 @@ class RecognitionProcessor:
         data["cameraId"] = self.cameraId
         print("Sending data:", data)
         self.socket.send_string(json.dumps(data, cls=utils.NumpyToJsonEncoder))
+        return json.loads(self.socket.recv_string())
 
 class DummyRecognitionProcessor:
     """if data processing is not needed use dummy processor"""
     def process(self, data):
-        pass
+        return None
 
-def calibrate(camera_index):
-    calibrationFilePath = input(
-        f"Input path calibration results will be stored({DEFAULT_CALIBRATION_RESULT_PATH} by default): ")
-    if calibrationFilePath == "":
-        calibrationFilePath = DEFAULT_CALIBRATION_RESULT_PATH
-
-    camera_config = CC.calibrateUsingCamera(
-        camera_index, doLog=True)
-    utils.dumpConfig(calibrationFilePath, camera_config)
+def calibrate(imagesPath, fileName):
+    camera_config = CC.calibrateUsingImages(imagesPath)
+    utils.dumpConfig(fileName, camera_config)
 
     print(f"Calibration result: \n {camera_config}")
-    print(f"It is stored at: {calibrationFilePath}")
+    print(f"It is stored at: {fileName}")
 
 
-def startRecognition(camera_index, precalibrateMarkerSizeData = None):
+def startRecognition(camera_index, precalibrateMarkerSizeData = None, remoteCameraId=None):
     calibrationFilePath = input(
         f"Input path to camera's calibration file({DEFAULT_CALIBRATION_RESULT_PATH} by default): ")
     if calibrationFilePath == "":
@@ -67,8 +62,10 @@ def startRecognition(camera_index, precalibrateMarkerSizeData = None):
     request = initialDataGiverSocket.recv_string()
     data = json.loads(request)
 
-    clientSocket = data["ClientSocket"]
-    recognitionProcessor = DummyRecognitionProcessor()#RecognitionProcessor(context, clientSocket, data["Id"])
+    clientSocket = data["Camera2ServerSocket"]
+    if remoteCameraId is None:
+        remoteCameraId = data["Id"]
+    recognitionProcessor = RecognitionProcessor(context, clientSocket, remoteCameraId)
 
     now = time.time()
     AD.startRecognize(camera_config, camera_index,
@@ -79,13 +76,15 @@ def startRecognition(camera_index, precalibrateMarkerSizeData = None):
 def main():
     parser = argparse.ArgumentParser(
         description="Default argument parser for application control")
-    parser.add_argument("--calibrate", type=bool, default=False,
-                        help="point if camera is need to calibrate(Default: False)")
+    parser.add_argument("--calibrate_images", type=str, default="",
+                        help="if path to images is given, camera will be calibrated(Default: "")")
+    parser.add_argument("--camera_calib_file_name", type=str, default=DEFAULT_CALIBRATION_RESULT_PATH, help="Will be saved as .json file")
     parser.add_argument("--camera_index", type=int, default=0,
                         help="point camera index that will be calibrated(Default: 0)")
     parser.add_argument("--source_path", type=str, default="",
                         help="point source (video/image) to aruco estimate(Default: "")")
     parser.add_argument("--precalibrateMarkerSizeData", type=tuple[str, float, float], default=None, help="if (path to img with marker, dist to marker, real marker size) is given, marker size will be precalibrated ")
+    parser.add_argument("--remote_cameraId", type=int, default=0, help="Will use id from InitialDataGiver service if 0")
 
     namespace = parser.parse_args()
 
@@ -99,12 +98,12 @@ def main():
         markerSize = float(markerSize)
         precalibrateMarkerSizeData = (cv2.imread(path), dist, markerSize)
 
-    if namespace.calibrate:
-        calibrate(camera_index)
+    if namespace.calibrate_images != "":
+        calibrate(namespace.calibrate_images, namespace.camera_calib_file_name)
     elif source_path != "":
-        startRecognition(source_path, precalibrateMarkerSizeData)
+        startRecognition(source_path, precalibrateMarkerSizeData, namespace.remote_cameraId)
     else:
-        startRecognition(camera_index, precalibrateMarkerSizeData)
+        startRecognition(camera_index, precalibrateMarkerSizeData, namespace.remote_cameraId)
 
 
 

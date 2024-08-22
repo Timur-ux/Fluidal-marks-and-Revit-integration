@@ -10,30 +10,31 @@ def main():
     with open(configPath, "r") as file:
         config = json.load(file)
 
-    print(f"Starting broker with\n \
-          CameraSocket: {config['ClientSocket']}\n \
-          ServerSocket: {config['ServerSocket']}\n \
-          RevitFrontend: {config['RevitClient']}\n \
-          RevitBackend: {config['RevitServer']}")
+    print(f"Starting broker with:")
+    for k,v in config.items():
+        print(k, ":", v)
 
     context = zmq.Context(1)
 
-    frontend = context.socket(zmq.PULL)
-    revitFrontend = context.socket(zmq.PULL)
+    revit2ServerSocket = [context.socket(zmq.PULL), context.socket(zmq.PUSH)]
+    server2RevitSocket = [context.socket(zmq.PULL), context.socket(zmq.PUSH)]
+    camera2ServerSocket = context.socket(zmq.ROUTER)
+    server2CameraSocket = context.socket(zmq.DEALER)
 
-    revitBackend = context.socket(zmq.PUSH)
-    backend = context.socket(zmq.PUSH)
+    camera2ServerSocket.bind(config["Camera2Server"])
+    server2CameraSocket.bind(config["Server2Camera"])
 
-    frontend.bind(config["ClientSocket"])
-    backend.bind(config["ServerSocket"])
-
-    revitFrontend.bind(config["RevitClient"])
-    revitBackend.bind(config["RevitServer"])
+    for i in range(2):
+        revit2ServerSocket[i].bind(config["Revit2Server"][i])
+        server2RevitSocket[i].bind(config["Server2Revit"][i])
     
     
     poller = zmq.Poller()
-    poller.register(frontend, zmq.POLLIN)
-    poller.register(revitFrontend, zmq.POLLIN)
+    poller.register(camera2ServerSocket, zmq.POLLIN)
+    poller.register(server2CameraSocket, zmq.POLLIN)
+    for i in range(2):
+        poller.register(revit2ServerSocket[i], zmq.POLLIN)
+        poller.register(server2RevitSocket[i], zmq.POLLIN)
 
     while True:
         try:
@@ -41,15 +42,27 @@ def main():
         except KeyboardInterrupt:
             break
 
-        if frontend in sockets:
-            message = frontend.recv_multipart()
-            print("Frontend:", message)
-            backend.send_multipart(message)
-       
-        if revitFrontend in sockets:
-            message = revitFrontend.recv_multipart()
-            print("Revit frontend:", message)
-            revitBackend.send_multipart(message)
+        if camera2ServerSocket in sockets:
+            message = camera2ServerSocket.recv_multipart()
+            print("Camera to Server:", message)
+            server2CameraSocket.send_multipart(message)
+
+        if server2CameraSocket in sockets:
+            message = server2CameraSocket.recv_multipart()
+            print("Server to camera:", message)
+            camera2ServerSocket.send_multipart(message)
+
+        if revit2ServerSocket[0] in sockets:
+            message = revit2ServerSocket[0].recv_multipart()
+            print("Revit to Server:", message)
+            revit2ServerSocket[1].send_multipart(message)
+
+        if server2RevitSocket[0] in sockets:
+            message = server2RevitSocket[0].recv_multipart()
+            print("Server to Revit:", message)
+            server2RevitSocket[1].send_multipart(message)
+
+
 
 
 if __name__ == "__main__":

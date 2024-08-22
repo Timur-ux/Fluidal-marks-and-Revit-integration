@@ -147,26 +147,24 @@ class MariaDBAdapter(IDataBaseAdapter):
         self.cache.update(objectData)
         markPos = json.dumps(list(objectData.markPos))
         objectPos = json.dumps(list(objectData.objectPos))
-        if objectData.isPositional():
-            request = f"REPLACE INTO {self.positionalMarksDBName} SET guid=?,markPos=?, objectPos=?, tagid=? WHERE tagid=?;"
+        if objectData.isPositional:
+            request = f"REPLACE INTO {self.positionalMarksDBName} SET guid=?,markPos=?, objectPos=?, tagid=?;"
             self.cursor.execute(request
                                 , (objectData.guid
                                 , markPos
                                 , objectPos
-                                , objectData.tagId
                                 , objectData.tagId)
                                 )
         else:
             size = json.dumps(list(objectData.size))
-            request = f"REPLACE INTO {self.objectsDBName} SET guid=?,name=?,tagid=?,markPos=?,objectPos=?,size=? WHERE tagid=?;"
+            request = f"REPLACE INTO {self.objectsDBName} SET guid=?,name=?,tagid=?,markPos=?,objectPos=?,size=?;"
             self.cursor.execute(request
                                 , (objectData.guid
                                 , objectData.name
                                 , objectData.tagId
                                 , markPos
                                 , objectPos
-                                , size
-                                , objectData.tagId)
+                                , size)
                                 )
         self.connection.commit()
 

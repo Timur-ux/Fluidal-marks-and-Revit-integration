@@ -4,79 +4,26 @@ from pupil_apriltags import Detector
 import time
 from CameraCalibrator import calibrateMarkerSize
 
-
-marker_size = 0.0724
-def processImage(img, at_detector, camera_matrix, dist_coeffs, camera_fc_params):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    cellSize = (int(img.shape[1]/10), int(img.shape[0]/10))
-    
-    detectionResult = at_detector.detect(
-        gray, estimate_tag_pose=True, camera_params=camera_fc_params, tag_size=marker_size)
-
-    ids = []
-    corners = []
-    rvecs = []
-    tvecs = []
-    for result in detectionResult:
-        ids.append(result.tag_id)
-        corners.append(result.corners)
-        rvecs.append(result.pose_R)
-        tvecs.append(result.pose_t)
-
-    if ids != []:
-        for i in range(len(ids)):
-            # Calculate distance
-            distance = np.linalg.norm(tvecs[i])
-
-            cv2.drawFrameAxes(img, camera_matrix, dist_coeffs,
-                              rvecs[i], tvecs[i], marker_size * 0.5)
-            cv2.putText(img, f"Dist: {distance:.5f}m z: {tvecs[i][2][0]:.5f}", (int(cellSize[0]*1.5), cellSize[1]), cv2.FONT_HERSHEY_SIMPLEX, 5, (0, 255, 0), 5, cv2.LINE_AA)
-            cv2.putText( img, f"Id: {ids[i]}", (cellSize[0]*2, cellSize[1]*2), cv2.FONT_HERSHEY_SIMPLEX, 5, (0, 255, 0), 5, cv2.LINE_AA)
-
-    img = cv2.resize(img, (1600, 800))
-    cv2.imshow('Frame', img)
-    cv2.waitKey(0)
+import DrawFunctions as DF
+from utils import CameraInfo
 
 
-def startRecognize(camera_config, source, recognitionProcessor, precalibrateMarkerSizeData = None):
-    """
-        source is a camera id or file's name is containing video
-        source may be also image file
-        if precalibrateMarkerSizeData as (img with marker, dist to marker, real marker size) is given, marker size will be precalibrated
-    """
-    
-    camera_matrix = np.asarray(camera_config["cameraMatrix"])
-    dist_coeffs = np.asarray(camera_config["distCoeffs"])
-    camera_fc_params = np.asarray([camera_config["fx"], camera_config["fy"],
-                        camera_config["cx"], camera_config["cy"]])
-    at_detector = Detector(
-        families="tagStandard41h12",
-        nthreads=4,
-        quad_decimate=1.0,
-        quad_sigma=0.0,
-        refine_edges=1,
-        decode_sharpening=0.25,
-        debug=0
-    )
-    if precalibrateMarkerSizeData is not None:
-        img, dist, markerSize = precalibrateMarkerSizeData
-        marker_size = calibrateMarkerSize(img, markerSize, dist, at_detector, camera_fc_params)
+MARKER_SIZE = 0.06979
+at_detector = Detector(
+    families="tagStandard41h12",
+    nthreads=4,
+    quad_decimate=1.0,
+    quad_sigma=0.0,
+    refine_edges=1,
+    decode_sharpening=0.25,
+    debug=0
+)
 
-    if type(source) is str and source.endswith(".jpg"):
-        processImage(cv2.imread(source), at_detector, camera_matrix, dist_coeffs, camera_fc_params)
-        return
-
-    # Capture video from camera
-    cap = cv2.VideoCapture(source)
-    firstFrame = True
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+def findMarksOnFrame(frame, cameraFCParams, markerSize):
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
         detectionResult = at_detector.detect(
-            gray, estimate_tag_pose=True, camera_params=camera_fc_params, tag_size=marker_size)
+            gray, estimate_tag_pose=True, camera_params=cameraFCParams, tag_size=markerSize)
 
         ids = []
         corners = []
@@ -88,30 +35,71 @@ def startRecognize(camera_config, source, recognitionProcessor, precalibrateMark
             rvecs.append(result.pose_R)
             tvecs.append(result.pose_t)
 
-        if ids != []:
-            for i in range(len(ids)):
-                # Calculate distance
-                distance = np.linalg.norm(tvecs[i])
+        return ids, corners, tvecs, rvecs
 
-                recognitionProcessor.process({
-                    "distance": distance,
-                    "tvec" : tvecs[i].T[0],
-                    "rvec" : cv2.Rodrigues(rvecs[i]).T[0],
-                    "id": ids[i]
-                })
-                cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs,
-                                  rvecs[i], tvecs[i], marker_size * 0.5)
-                cv2.putText(frame, f"Dist: {distance:.2f}m x: {tvecs[i][0][0]:.2f} y: {tvecs[i][1][0]:.2f} z: {tvecs[i][2][0]:.2f}", (
-                    10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
-                cv2.putText(
-                    frame, f"Id: {ids[i]}", (100, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
-        cv2.imshow('Frame', frame)
-        if (firstFrame):
-            cv2.waitKey(0)
-            firstFrame = False
-        if cv2.waitKey(1) & 0xFF == ord('q'):
+def processFrame(frame, camInfo: CameraInfo, markerSize, recognitionProcessor, waitDelay = 1):
+    ids, corners, tvecs, rvecs = findMarksOnFrame(frame, camInfo.fcParams, markerSize)
+    if ids != []:
+        for i in range(len(ids)):
+            # Calculate distance
+            distance = np.linalg.norm(tvecs[i])
+            response = recognitionProcessor.process({ # TODO: send all detected marks by one message
+                "distance": distance,
+                "tvec" : tvecs[i].T[0],
+                "rvec" : list(cv2.Rodrigues(rvecs[i]))[0].T[0],
+                "id": ids[i]
+            })
+            if response is not None and response != {}:
+                if response["type"] != "DrawObjectBox":
+                    print(f"Undefined response type. Skipping...")
+                else:
+                    name, size, pos = response["name"], np.asarray(response["size"]), np.asarray(response["pos"]).reshape((3, 1))
+                    pos = tvecs[i] 
+                    rot, _ = cv2.Rodrigues(np.asarray(response["rot"]).reshape((3, 1)))
+                    rot = rvecs[i]
+
+                    DF.drawMarkFrame(frame, corners[i])
+                    rot = np.asarray([1 if i == j else 0 for i in range(3) for j in range(3)], dtype=np.float64).reshape((3, 3))
+                    angles = DF.calculateAnglesPos(pos, size, rot, camInfo)
+                    DF.drawBoundingBoxOnFrame(frame, angles)
+                    DF.drawNameAboveMarker(frame, name, tvecs[i], camInfo)
+
+            cv2.drawFrameAxes(frame, camInfo.matrix, camInfo.distCoeffs, rvecs[i], tvecs[i], markerSize * 0.5)
+    frame = cv2.resize(frame, (1000, 500))
+    cv2.imshow('Frame', frame)
+    cv2.waitKey(waitDelay)
+
+
+def startRecognize(cameraConfig, source, recognitionProcessor, precalibrateMarkerSizeData = None):
+    """
+        source is a camera id or file's name is containing video
+        source may be also image file
+        if precalibrateMarkerSizeData as (img with marker, dist to marker, real marker size) is given, marker size will be precalibrated
+    """
+    cameraMatrix, distCoeffs, tvec, rvec = cameraConfig["cameraMatrix"], cameraConfig["distCoeffs"], cameraConfig["tvec"], cameraConfig["rvec"]
+    cameraFCParams = np.asarray([cameraConfig["fx"], cameraConfig["fy"],
+                        cameraConfig["cx"], cameraConfig["cy"]])
+    cameraInfo = CameraInfo(cameraMatrix, distCoeffs, tvec, rvec, cameraFCParams)
+
+    markerSize = MARKER_SIZE
+    if precalibrateMarkerSizeData is not None:
+        img, dist, markerSize = precalibrateMarkerSizeData
+        markerSize = calibrateMarkerSize(img, markerSize, dist, at_detector, cameraFCParams)
+
+    if type(source) is str and source.endswith(".jpg"):
+        processFrame(cv2.imread(source), cameraInfo, markerSize,recognitionProcessor)
+        cv2.waitKey(0)
+        return
+
+    # Capture video from camera
+    cap = cv2.VideoCapture(source)
+    while True:
+        ret, frame = cap.read()
+        if not ret:
             break
+
+        processFrame(frame, cameraInfo,markerSize, recognitionProcessor)
 
     cap.release()
     cv2.destroyAllWindows()

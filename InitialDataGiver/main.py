@@ -3,7 +3,7 @@ import json
 import argparse
 
 def main():
-    DEFAULT_CONFIG_PATH = "../Config.json"
+    DEFAULT_CONFIG_PATH = "./Config.json"
     parser = argparse.ArgumentParser(
         description="Default argument parser for application control")
     parser.add_argument("--config_path", type=str, default=DEFAULT_CONFIG_PATH,
@@ -30,7 +30,7 @@ def main():
     while True:
         message = socket.recv_string()
         data = {"Id": currentId,
-                "ClientSocket" : config["ClientSocket"]}
+                "Camera2ServerSocket" : config["Camera2Server"]}
         socket.send_string(json.dumps(data))
         currentId += 1
         
