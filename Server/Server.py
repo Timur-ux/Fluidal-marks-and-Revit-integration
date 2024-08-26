@@ -4,6 +4,7 @@ from DataBaseAdapter import IDataBaseAdapter
 from objectData import ObjectData
 import numpy as np
 import cv2
+import utils
 
 EVALUATION_ERROR = 0.05
 
@@ -24,7 +25,6 @@ def notifyRevitAboutMovedObject(guid, newPos, newRot, revitSocket):
     
     revitSocket.send_string(data)
     
-
 class Server:
     def __init__(self, context, server2CameraSocket, revit2ServerSocket, server2RevitSocket, dbAdapter: IDataBaseAdapter):
         self.context = context
@@ -57,8 +57,10 @@ class Server:
             return
         
         if objectData.isPositional:
-            cameraRot, _ = cv2.Rodrigues(rvec)
-            self.camerasPositionData[cameraId] = np.dot(cameraRot, np.asarray(objectData.markPos) - np.asarray(tvec))
+            # calculate camera2Revit homogeneous transformation matrix
+            cam2MarkTransform = toHomogeneous(rvec, tvec)
+            mark2RevitTransform = objectData.mark2RevitTransform()
+            self.camerasPositionData[cameraId] = cam2MarkTransform @ mark2RevitTransform
             print(f"Position of camera with id: {cameraId} has updated")
             return
 

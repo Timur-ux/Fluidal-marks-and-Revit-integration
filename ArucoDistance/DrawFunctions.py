@@ -6,17 +6,18 @@ def calculateAnglesPos(objectPos,
                        objectSize,
                        objectRot,
                        camInfo: CameraInfo):
-    w, h, d = 0.1, 0.1, 0.1#objectSize / 5
+    w, h, d = objectSize / 10
+    markDepth = 0.05
     angles = np.zeros((8,3,1))
-    angles[0] = np.asarray([- w/2, - h/2, - d/2]).reshape((3, 1))
-    angles[1] = np.asarray([- w/2, + h/2, - d/2]).reshape((3, 1))
-    angles[2] = np.asarray([+ w/2, + h/2, - d/2]).reshape((3, 1))
-    angles[3] = np.asarray([+ w/2, - h/2, - d/2]).reshape((3, 1))
+    angles[0] = np.asarray([- w/2, - h/2, markDepth]).reshape((3, 1))
+    angles[1] = np.asarray([- w/2, + h/2, markDepth]).reshape((3, 1))
+    angles[2] = np.asarray([+ w/2, + h/2, markDepth]).reshape((3, 1))
+    angles[3] = np.asarray([+ w/2, - h/2, markDepth]).reshape((3, 1))
 
-    angles[4] = np.asarray([- w/2, - h/2, + d/2]).reshape((3, 1))
-    angles[5] = np.asarray([- w/2, + h/2, + d/2]).reshape((3, 1))
-    angles[6] = np.asarray([+ w/2, + h/2, + d/2]).reshape((3, 1))
-    angles[7] = np.asarray([+ w/2, - h/2, + d/2]).reshape((3, 1))
+    angles[4] = np.asarray([- w/2, - h/2, + d + markDepth]).reshape((3, 1))
+    angles[5] = np.asarray([- w/2, + h/2, + d + markDepth]).reshape((3, 1))
+    angles[6] = np.asarray([+ w/2, + h/2, + d + markDepth]).reshape((3, 1))
+    angles[7] = np.asarray([+ w/2, - h/2, + d + markDepth]).reshape((3, 1))
 
     angles, _ = cv2.projectPoints(angles, objectRot, objectPos, camInfo.matrix, camInfo.distCoeffs)
 
@@ -50,14 +51,15 @@ def drawBoundingBoxOnFrame(frame,
 def drawNameAboveMarker(frame,
                         name,
                         markTvec,
+                        markRvec,
                         camInfo: CameraInfo,
                         font = cv2.FONT_HERSHEY_COMPLEX,
                         fontSize = 1,
                         color = (255, 0, 0),
                         thickness = 5,
-                        nameShift = 500):
-    point,  _ = cv2.projectPoints(markTvec, camInfo.rvec, camInfo.tvec, camInfo.matrix, camInfo.distCoeffs)
-    x, y = map((lambda x: max(0, int(x))), point.reshape(2))
+                        nameShift = 100):
+    point,  _ = cv2.projectPoints(np.asarray([[0, 0, 0]], dtype=np.float64).reshape((1, 3, 1)), markRvec, markTvec, camInfo.matrix, camInfo.distCoeffs)
+    x, y = map((lambda p: max(0, int(p) - nameShift)), point[0].reshape(2))
     
     cv2.putText(frame, name, (x, y), font, fontSize, color, thickness)
 

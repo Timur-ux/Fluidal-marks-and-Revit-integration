@@ -8,4 +8,15 @@ class ObjectData:
         self.size = size
         self.isPositional = isPositional
 
+    def mark2RevitTransform(self):
+        """
+            return homogeneous transformation 
+            from mark coord system 
+            to revit coord system
+            (only for positional marks)
+        """
+        assert self.isPositional
+        pass
+
+
 
